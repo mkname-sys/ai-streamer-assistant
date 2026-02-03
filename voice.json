@@ -1,0 +1,7 @@
+{
+  "default": {
+    "enabled": true,
+    "voice": "alloy",
+    "volume": 1.0
+  }
+}

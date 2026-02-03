@@ -1,0 +1,7 @@
+{
+  "default": {
+    "tone": "friendly",
+    "style": "short",
+    "enabled": true
+  }
+}

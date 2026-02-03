@@ -1,0 +1,10 @@
+{
+  "testuser": {
+    "messages": [
+      {
+        "text": "Hello chat",
+        "time": 1710000000000
+      }
+    ]
+  }
+}

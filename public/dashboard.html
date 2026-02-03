@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dashboard</title>
+</head>
+<body>
+  <h1>Streamer Dashboard</h1>
+
+  <p>Plan: <strong id="plan">loading...</strong></p>
+
+  <button onclick="upgrade()">Upgrade to Pro</button>
+
+  <hr />
+
+  <input id="msg" placeholder="Message" />
+  <button onclick="send()">Send</button>
+
+  <ul id="history"></ul>
+
+  <script>
+    const userId = location.pathname.split("/").pop();
+
+    async function loadPlan() {
+      const res = await fetch(`/api/plan/${userId}`);
+      const data = await res.json();
+      document.getElementById("plan").innerText = data.plan;
+    }
+
+    async function loadHistory() {
+      const res = await fetch(`/api/messages/${userId}`);
+      const messages = await res.json();
+      const ul = document.getElementById("history");
+      ul.innerHTML = "";
+      messages.forEach(m => {
+        const li = document.createElement("li");
+        li.textContent = m.text;
+        ul.appendChild(li);
+      });
+    }
+
+    async function send() {
+      const msg = document.getElementById("msg").value;
+
+      const res = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, message: msg })
+      });
+
+      if (!res.ok) alert("Daily limit reached");
+
+      document.getElementById("msg").value = "";
+      loadHistory();
+    }
+
+    async function upgrade() {
+      const res = await fetch("/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId })
+      });
+
+      const data = await res.json();
+      location.href = data.url;
+    }
+
+    loadPlan();
+    loadHistory();
+  </script>
+</body>
+</html>

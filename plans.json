@@ -1,0 +1,14 @@
+{
+  "free": {
+    "dailyLimit": 20,
+    "tts": false
+  },
+  "pro": {
+    "dailyLimit": 1000,
+    "tts": true
+  },
+  "creator": {
+    "dailyLimit": 100000,
+    "tts": true
+  }
+}

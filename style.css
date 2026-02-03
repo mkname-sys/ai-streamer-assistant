@@ -1,0 +1,12 @@
+body {
+  background:#020617;
+  color:#e5e7eb;
+  font-family:Arial;
+  padding:40px;
+}
+
+select, label {
+  display:block;
+  margin:15px 0;
+  font-size:18px;
+}

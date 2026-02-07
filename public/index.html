@@ -2,9 +2,38 @@
 <html>
 <head>
   <title>AI Streamer Assistant</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #0f0f0f;
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    button {
+      padding: 14px 22px;
+      border: none;
+      border-radius: 10px;
+      background: #9146FF;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.85;
+    }
+  </style>
 </head>
 <body>
   <h1>AI Streamer Assistant</h1>
+  <p>Login with Twitch to open your dashboard.</p>
+
   <a href="/auth/twitch">
     <button>Login with Twitch</button>
   </a>

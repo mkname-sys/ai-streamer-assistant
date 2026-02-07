@@ -1,71 +1,182 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f0f0f;
+      color: white;
+      padding: 30px;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+
+    .card {
+      background: #1b1b1b;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 20px;
+      box-shadow: 0px 0px 15px rgba(0,0,0,0.5);
+    }
+
+    button {
+      padding: 12px 18px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 10px;
+      margin-top: 10px;
+    }
+
+    .start {
+      background: #00c853;
+      color: black;
+    }
+
+    .stop {
+      background: #ff1744;
+      color: white;
+    }
+
+    .send {
+      background: #2979ff;
+      color: white;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    #status {
+      margin-top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    #overlayLink {
+      margin-top: 15px;
+      display: block;
+      font-size: 16px;
+      color: #00e5ff;
+      text-decoration: none;
+    }
+  </style>
 </head>
+
 <body>
-  <h1>Streamer Dashboard</h1>
+  <h1>AI Streamer Assistant Dashboard</h1>
+  <p>Manage your Twitch bot + overlay</p>
 
-  <p>Plan: <strong id="plan">loading...</strong></p>
+  <div class="card">
+    <h2>Bot Controls</h2>
 
-  <button onclick="upgrade()">Upgrade to Pro</button>
+    <button class="start" onclick="startBot()">Start Bot</button>
+    <button class="stop" onclick="stopBot()">Stop Bot</button>
 
-  <hr />
+    <div id="status">Checking bot status...</div>
+  </div>
 
-  <input id="msg" placeholder="Message" />
-  <button onclick="send()">Send</button>
+  <div class="card">
+    <h2>Overlay Message</h2>
 
-  <ul id="history"></ul>
+    <input id="overlayInput" placeholder="Type overlay message here..." />
+    <button class="send" onclick="sendOverlay()">Send To Overlay</button>
+
+    <p id="overlayResult"></p>
+
+    <a id="overlayLink" href="#" target="_blank">Overlay Link Loading...</a>
+  </div>
 
   <script>
-    const userId = location.pathname.split("/").pop();
+    let myChannel = null;
 
-    async function loadPlan() {
-      const res = await fetch(`/api/plan/${userId}`);
+    async function getMe() {
+      const res = await fetch("/api/me");
       const data = await res.json();
-      document.getElementById("plan").innerText = data.plan;
+
+      if (!data.ok) {
+        window.location.href = "/";
+        return;
+      }
+
+      myChannel = data.channel;
+
+      document.getElementById("overlayLink").href = `/overlay/${myChannel}`;
+      document.getElementById("overlayLink").innerText = `Overlay Link: http://localhost:3000/overlay/${myChannel}`;
     }
 
-    async function loadHistory() {
-      const res = await fetch(`/api/messages/${userId}`);
-      const messages = await res.json();
-      const ul = document.getElementById("history");
-      ul.innerHTML = "";
-      messages.forEach(m => {
-        const li = document.createElement("li");
-        li.textContent = m.text;
-        ul.appendChild(li);
-      });
+    async function checkStatus() {
+      const res = await fetch("/api/bot/status");
+      const data = await res.json();
+
+      if (data.running) {
+        document.getElementById("status").innerText = "🟢 Bot is RUNNING";
+      } else {
+        document.getElementById("status").innerText = "🔴 Bot is STOPPED";
+      }
     }
 
-    async function send() {
-      const msg = document.getElementById("msg").value;
-
-      const res = await fetch("/api/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, message: msg })
-      });
-
-      if (!res.ok) alert("Daily limit reached");
-
-      document.getElementById("msg").value = "";
-      loadHistory();
-    }
-
-    async function upgrade() {
-      const res = await fetch("/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId })
+    async function startBot() {
+      const res = await fetch("/api/bot/start", {
+        method: "POST"
       });
 
       const data = await res.json();
-      location.href = data.url;
+      alert(data.message || data.error);
+      checkStatus();
     }
 
-    loadPlan();
-    loadHistory();
+    async function stopBot() {
+      const res = await fetch("/api/bot/stop", {
+        method: "POST"
+      });
+
+      const data = await res.json();
+      alert(data.message || data.error);
+      checkStatus();
+    }
+
+    async function sendOverlay() {
+      const message = document.getElementById("overlayInput").value;
+
+      const res = await fetch("/api/overlay/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ message })
+      });
+
+      const data = await res.json();
+
+      if (data.ok) {
+        document.getElementById("overlayResult").innerText = "✅ Overlay updated!";
+      } else {
+        document.getElementById("overlayResult").innerText = "❌ Failed: " + data.error;
+      }
+    }
+
+    async function init() {
+      await getMe();
+      await checkStatus();
+      setInterval(checkStatus, 3000);
+    }
+
+    init();
   </script>
 </body>
 </html>

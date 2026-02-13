@@ -16,44 +16,69 @@
 
     #overlayBox {
       position: absolute;
-      top: 30px;
-      left: 30px;
-      padding: 20px 30px;
-      border-radius: 12px;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      padding: 18px 26px;
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 14px;
+      color: white;
       font-size: 28px;
       font-weight: bold;
-      color: white;
-      background: rgba(0, 0, 0, 0.65);
-      box-shadow: 0px 0px 25px rgba(0, 0, 0, 0.6);
-      transition: 0.3s ease;
+      text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
+      opacity: 0;
+      transition: all 0.4s ease;
       max-width: 80%;
       word-wrap: break-word;
+      text-align: center;
+    }
+
+    #overlayBox.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0px);
     }
   </style>
 </head>
 
 <body>
-  <div id="overlayBox">Overlay Loading...</div>
+  <div id="overlayBox">Waiting...</div>
 
   <script>
-    async function fetchOverlayMessage() {
-      try {
-        const urlParts = window.location.pathname.split("/");
-        const channel = urlParts[urlParts.length - 1];
+    const overlayBox = document.getElementById("overlayBox");
 
+    // Get channel name from URL
+    const parts = window.location.pathname.split("/");
+    const channel = parts[parts.length - 1];
+
+    let lastMessage = "";
+
+    function showMessage(text) {
+      overlayBox.innerText = text;
+      overlayBox.classList.add("show");
+
+      // auto hide after 6 seconds
+      setTimeout(() => {
+        overlayBox.classList.remove("show");
+      }, 6000);
+    }
+
+    async function pollOverlay() {
+      try {
         const res = await fetch(`/api/overlay/${channel}`);
         const data = await res.json();
 
-        if (data.ok) {
-          document.getElementById("overlayBox").innerText = data.message;
+        if (data.ok && data.message && data.message !== lastMessage) {
+          lastMessage = data.message;
+          showMessage(data.message);
         }
       } catch (err) {
-        document.getElementById("overlayBox").innerText = "Overlay Error ❌";
+        console.log("Overlay fetch error:", err);
       }
     }
 
-    fetchOverlayMessage();
-    setInterval(fetchOverlayMessage, 2000);
+    // Poll every 2 seconds
+    setInterval(pollOverlay, 2000);
+    pollOverlay();
   </script>
 </body>
 </html>

@@ -7,13 +7,16 @@
     "dev": "node server.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-session": "^1.17.3",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "express-session": "^1.19.0",
+    "node-fetch": "^3.3.2",
+    "openai": "^6.21.0",
     "passport": "^0.7.0",
     "passport-twitch": "^1.0.0",
     "passport-twitch-new": "^0.0.3",
     "sqlite3": "^5.1.7",
+    "stripe": "^20.3.1",
     "tmi.js": "^1.8.5",
     "ws": "^8.18.0"
   }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard</title>
+  <title>AI Streamer Assistant Dashboard</title>
 
   <style>
     body {
@@ -13,17 +13,15 @@
       padding: 30px;
     }
 
-    h1 {
-      font-size: 32px;
-      margin-bottom: 10px;
-    }
+    h1 { font-size: 32px; margin-bottom: 10px; }
+    p { color: #aaa; }
 
     .card {
       background: #1b1b1b;
       padding: 20px;
       border-radius: 12px;
       margin-top: 20px;
-      box-shadow: 0px 0px 15px rgba(0,0,0,0.5);
+      box-shadow: 0 0 15px rgba(0,0,0,0.5);
     }
 
     button {
@@ -37,31 +35,22 @@
       margin-top: 10px;
     }
 
-    .start {
-      background: #00c853;
-      color: black;
-    }
+    .start { background: #00c853; color: black; }
+    .stop { background: #ff1744; color: white; }
+    .send { background: #2979ff; color: white; }
+    .logout { background: #555; color: white; }
 
-    .stop {
-      background: #ff1744;
-      color: white;
-    }
-
-    .send {
-      background: #2979ff;
-      color: white;
-    }
-
-    input {
+    input, select {
       width: 100%;
       padding: 12px;
       border-radius: 10px;
       border: none;
       margin-top: 10px;
       font-size: 16px;
+      margin-bottom: 10px;
     }
 
-    #status {
+    #status, #subscribeStatus, #overlayResult {
       margin-top: 10px;
       font-size: 18px;
       font-weight: bold;
@@ -74,35 +63,85 @@
       color: #00e5ff;
       text-decoration: none;
     }
+
+    .row {
+      display: flex;
+      gap: 15px;
+      margin-top: 10px;
+    }
+
+    .row button {
+      flex: 1;
+    }
+
+    label {
+      display: block;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    .toggle-box {
+      margin-top: 10px;
+      background: #111;
+      padding: 12px;
+      border-radius: 10px;
+    }
+
+    .toggle-box label {
+      margin: 8px 0;
+    }
   </style>
 </head>
 
 <body>
   <h1>AI Streamer Assistant Dashboard</h1>
-  <p>Manage your Twitch bot + overlay</p>
+  <p>Manage your Twitch bot, overlay, AI settings, and subscription</p>
+
+  <div class="card">
+    <h2>Account</h2>
+    <div class="row">
+      <button id="logoutBtn" class="logout">Logout</button>
+    </div>
+    <p id="userInfo">Loading user info...</p>
+  </div>
 
   <div class="card">
     <h2>Bot Controls</h2>
 
-    <button class="start" onclick="startBot()">Start Bot</button>
-    <button class="stop" onclick="stopBot()">Stop Bot</button>
+    <label>Channel</label>
+    <select id="channel"></select>
 
-    <div id="status">Checking bot status...</div>
+    <div class="row">
+      <button id="startBtn" class="start">Start Bot</button>
+      <button id="stopBtn" class="stop">Stop Bot</button>
+    </div>
+
+    <div id="status">Bot status loading...</div>
+    <div id="subscribeStatus"></div>
+
+    <button id="subscribeBtn" style="display:none;">Subscribe to Unlock Bot</button>
+
+    <div class="toggle-box">
+      <label><input type="checkbox" id="ai"> Enable AI Chat</label>
+      <label><input type="checkbox" id="voice"> Enable Voice</label>
+    </div>
   </div>
 
   <div class="card">
     <h2>Overlay Message</h2>
-
     <input id="overlayInput" placeholder="Type overlay message here..." />
-    <button class="send" onclick="sendOverlay()">Send To Overlay</button>
-
+    <button id="sendOverlayBtn" class="send">Send To Overlay</button>
     <p id="overlayResult"></p>
-
     <a id="overlayLink" href="#" target="_blank">Overlay Link Loading...</a>
   </div>
 
   <script>
     let myChannel = null;
+    let subscribed = false;
+
+    const aiToggle = document.getElementById("ai");
+    const voiceToggle = document.getElementById("voice");
+    const channelSelect = document.getElementById("channel");
 
     async function getMe() {
       const res = await fetch("/api/me");
@@ -114,66 +153,151 @@
       }
 
       myChannel = data.channel;
+      subscribed = data.user.subscribed || false;
+
+      document.getElementById("userInfo").innerText =
+        `Logged in as: ${data.user.display_name} (${data.channel})`;
 
       document.getElementById("overlayLink").href = `/overlay/${myChannel}`;
-      document.getElementById("overlayLink").innerText = `Overlay Link: http://localhost:3000/overlay/${myChannel}`;
+      document.getElementById("overlayLink").innerText =
+        `Overlay Link: http://localhost:3000/overlay/${myChannel}`;
+
+      updateSubscriptionUI();
     }
 
-    async function checkStatus() {
-      const res = await fetch("/api/bot/status");
-      const data = await res.json();
+    function updateSubscriptionUI() {
+      const startBtn = document.getElementById("startBtn");
+      const statusEl = document.getElementById("subscribeStatus");
+      const subBtn = document.getElementById("subscribeBtn");
 
-      if (data.running) {
-        document.getElementById("status").innerText = "🟢 Bot is RUNNING";
+      if (subscribed) {
+        startBtn.disabled = false;
+        statusEl.innerText = "✅ You are subscribed! Bot unlocked.";
+        subBtn.style.display = "none";
       } else {
-        document.getElementById("status").innerText = "🔴 Bot is STOPPED";
+        startBtn.disabled = true;
+        statusEl.innerText = "❌ Subscribe to unlock the bot.";
+        subBtn.style.display = "inline-block";
       }
     }
 
-    async function startBot() {
-      const res = await fetch("/api/bot/start", {
-        method: "POST"
-      });
+    // SSE for live updates
+    function connectSSE() {
+      const evtSource = new EventSource(`/api/live/${myChannel}`);
 
-      const data = await res.json();
-      alert(data.message || data.error);
-      checkStatus();
+      evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        document.getElementById("status").innerText =
+          data.running ? "🟢 Bot is RUNNING" : "🔴 Bot is STOPPED";
+
+        if (data.overlay) {
+          document.getElementById("overlayResult").innerText =
+            "Overlay: " + data.overlay;
+        }
+      };
+
+      evtSource.onerror = () => {
+        console.log("SSE disconnected...");
+      };
     }
 
-    async function stopBot() {
-      const res = await fetch("/api/bot/stop", {
-        method: "POST"
-      });
-
+    // Bot controls
+    document.getElementById("startBtn").addEventListener("click", async () => {
+      const res = await fetch("/api/bot/start", { method: "POST" });
       const data = await res.json();
       alert(data.message || data.error);
-      checkStatus();
-    }
+    });
 
-    async function sendOverlay() {
+    document.getElementById("stopBtn").addEventListener("click", async () => {
+      const res = await fetch("/api/bot/stop", { method: "POST" });
+      const data = await res.json();
+      alert(data.message || data.error);
+    });
+
+    // Overlay
+    document.getElementById("sendOverlayBtn").addEventListener("click", async () => {
       const message = document.getElementById("overlayInput").value;
 
       const res = await fetch("/api/overlay/send", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message })
       });
 
       const data = await res.json();
 
-      if (data.ok) {
-        document.getElementById("overlayResult").innerText = "✅ Overlay updated!";
+      document.getElementById("overlayResult").innerText =
+        data.ok ? "✅ Overlay updated!" : "❌ " + data.error;
+    });
+
+    // Subscription button
+    document.getElementById("subscribeBtn").addEventListener("click", async () => {
+      const btn = document.getElementById("subscribeBtn");
+      btn.disabled = true;
+
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      const data = await res.json();
+
+      if (data.ok && data.url) {
+        window.location = data.url;
       } else {
-        document.getElementById("overlayResult").innerText = "❌ Failed: " + data.error;
+        alert("❌ Error creating checkout session");
+        btn.disabled = false;
       }
+    });
+
+    // Logout
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      window.location.href = "/auth/logout";
+    });
+
+    // Channel + AI/Voice settings
+    async function loadChannels() {
+      const res = await fetch("/api/channels");
+      const channels = await res.json();
+
+      channelSelect.innerHTML = channels
+        .map((c) => `<option value="${c}">${c}</option>`)
+        .join("");
+
+      loadSettings();
     }
+
+    async function loadSettings() {
+      const chan = channelSelect.value;
+      const res = await fetch(`/api/settings/${chan}`);
+      const s = await res.json();
+
+      aiToggle.checked = s.ai;
+      voiceToggle.checked = s.voice;
+    }
+
+    async function saveSettings() {
+      const chan = channelSelect.value;
+
+      await fetch(`/api/settings/${chan}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ai: aiToggle.checked,
+          voice: voiceToggle.checked
+        })
+      });
+    }
+
+    channelSelect.onchange = loadSettings;
+    aiToggle.onchange = saveSettings;
+    voiceToggle.onchange = saveSettings;
 
     async function init() {
       await getMe();
-      await checkStatus();
-      setInterval(checkStatus, 3000);
+      await loadChannels();
+      connectSSE();
     }
 
     init();

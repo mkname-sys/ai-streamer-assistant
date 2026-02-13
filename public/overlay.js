@@ -1,16 +1,9 @@
-const socket = io();
-const messageEl = document.getElementById("overlay-message");
+const channel = window.location.pathname.split("/").pop(); // get channel from URL
+const overlayEl = document.getElementById("overlayMessage");
 
-const userId = window.location.pathname.split("/").pop();
-
-socket.emit("register", userId);
-
-socket.on("overlay-message", (msg) => {
-  messageEl.textContent = msg;
-  messageEl.classList.add("show");
-
-  clearTimeout(window.hideTimer);
-  window.hideTimer = setTimeout(() => {
-    messageEl.classList.remove("show");
-  }, 5000);
-});
+// Connect to live updates SSE
+const evtSource = new EventSource(`/api/live/${channel}`);
+evtSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  overlayEl.textContent = data.overlay;
+};

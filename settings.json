@@ -1,1 +1,10 @@
-{}
+{
+  "default": {
+    "ai": true,
+    "voice": true
+  },
+  "mkname09": {
+    "ai": false,
+    "voice": false
+  }
+}

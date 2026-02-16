@@ -1,3 +1,5 @@
+// auth.js (FINAL FULL REPLACEABLE)
+
 import express from "express";
 import passport from "passport";
 import session from "express-session";
@@ -21,6 +23,11 @@ router.use(
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      httpOnly: true,
+      sameSite: "lax",
+    },
   })
 );
 
@@ -41,7 +48,10 @@ passport.use(
     {
       clientID: process.env.TWITCH_CLIENT_ID,
       clientSecret: process.env.TWITCH_CLIENT_SECRET,
-      callbackURL: process.env.TWITCH_CALLBACK_URL || "http://localhost:3000/auth/twitch/callback",
+
+      // IMPORTANT: MUST MATCH TWITCH DEV CONSOLE EXACTLY
+      callbackURL: process.env.TWITCH_CALLBACK_URL,
+
       scope: "user:read:email",
     },
     (accessToken, refreshToken, profile, done) => {

@@ -2,54 +2,31 @@
 
 import express from "express";
 import passport from "passport";
-import session from "express-session";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { Strategy as TwitchStrategy } from "passport-twitch-new";
 
 const router = express.Router();
 
-// ----------------------
-// Twitch Strategy Import
-// ----------------------
-import TwitchStrategyModule from "passport-twitch-new";
-const TwitchStrategy = TwitchStrategyModule.Strategy;
+// ===============================
+// PASSPORT SESSION HANDLING
+// ===============================
+passport.serializeUser((user, done) => {
+  done(null, user);
+});
 
-// ----------------------
-// Session Setup
-// ----------------------
-router.use(
-  session({
-    secret: process.env.SESSION_SECRET || "supersecret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production", // HTTPS only in production
-      httpOnly: true,
-      sameSite: "lax",
-    },
-  })
-);
+passport.deserializeUser((obj, done) => {
+  done(null, obj);
+});
 
-router.use(passport.initialize());
-router.use(passport.session());
-
-// ----------------------
-// Passport Serialize / Deserialize
-// ----------------------
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
-
-// ----------------------
-// Twitch OAuth Strategy
-// ----------------------
+// ===============================
+// TWITCH STRATEGY
+// ===============================
 passport.use(
   new TwitchStrategy(
     {
       clientID: process.env.TWITCH_CLIENT_ID,
       clientSecret: process.env.TWITCH_CLIENT_SECRET,
 
-      // IMPORTANT: MUST MATCH TWITCH DEV CONSOLE EXACTLY
+      // IMPORTANT: MUST MATCH TWITCH DEVELOPER CALLBACK EXACTLY
       callbackURL: process.env.TWITCH_CALLBACK_URL,
 
       scope: "user:read:email",
@@ -62,9 +39,22 @@ passport.use(
   )
 );
 
-// ----------------------
-// Routes
-// ----------------------
+// ===============================
+// DEBUG (VERY IMPORTANT FOR RENDER)
+// ===============================
+router.get("/debug", (req, res) => {
+  res.json({
+    TWITCH_CLIENT_ID: process.env.TWITCH_CLIENT_ID ? "✅ Loaded" : "❌ Missing",
+    TWITCH_CLIENT_SECRET: process.env.TWITCH_CLIENT_SECRET
+      ? "✅ Loaded"
+      : "❌ Missing",
+    TWITCH_CALLBACK_URL: process.env.TWITCH_CALLBACK_URL || "❌ Missing",
+  });
+});
+
+// ===============================
+// ROUTES
+// ===============================
 router.get("/twitch", passport.authenticate("twitch"));
 
 router.get(

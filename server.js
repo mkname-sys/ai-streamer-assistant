@@ -22,34 +22,80 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ===============================
-// IMPORTANT: STRIPE WEBHOOK RAW BODY
+// STRIPE WEBHOOK RAW BODY (MUST BE FIRST)
 // ===============================
-app.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  (req, res, next) => {
-    next();
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error("Webhook signature error:", err);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
   }
-);
+
+  // Subscription activated
+  if (
+    event.type === "checkout.session.completed" ||
+    event.type === "invoice.payment_succeeded"
+  ) {
+    const email = event.data.object.customer_email;
+
+    if (email) {
+      const subscriptionsFile = path.join(__dirname, "subscriptions.json");
+
+      let subscriptions = {};
+      if (fs.existsSync(subscriptionsFile)) {
+        subscriptions = JSON.parse(fs.readFileSync(subscriptionsFile, "utf-8"));
+      }
+
+      subscriptions[email] = { status: "active" };
+
+      fs.writeFileSync(
+        subscriptionsFile,
+        JSON.stringify(subscriptions, null, 2)
+      );
+
+      console.log("💳 Subscription activated for:", email);
+    }
+  }
+
+  // Subscription canceled
+  if (event.type === "customer.subscription.deleted") {
+    const email = event.data.object.customer_email;
+
+    if (email) {
+      const subscriptionsFile = path.join(__dirname, "subscriptions.json");
+
+      let subscriptions = {};
+      if (fs.existsSync(subscriptionsFile)) {
+        subscriptions = JSON.parse(fs.readFileSync(subscriptionsFile, "utf-8"));
+      }
+
+      subscriptions[email] = { status: "inactive" };
+
+      fs.writeFileSync(
+        subscriptionsFile,
+        JSON.stringify(subscriptions, null, 2)
+      );
+
+      console.log("❌ Subscription canceled for:", email);
+    }
+  }
+
+  res.json({ received: true });
+});
 
 // ===============================
 // MIDDLEWARE
 // ===============================
-app.use((req, res, next) => {
-  if (req.originalUrl === "/webhook") {
-    next();
-  } else {
-    express.json()(req, res, next);
-  }
-});
-
-app.use((req, res, next) => {
-  if (req.originalUrl === "/webhook") {
-    next();
-  } else {
-    express.urlencoded({ extended: true })(req, res, next);
-  }
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
@@ -224,28 +270,23 @@ app.get("/api/bot/status", requireLogin, (req, res) => {
 // ===============================
 // API: START BOT (LOCKED TO SUBSCRIBERS)
 // ===============================
-app.post(
-  "/api/bot/start",
-  requireLogin,
-  requireSubscription,
-  async (req, res) => {
-    try {
-      const channel = req.user.login || req.user.display_name;
+app.post("/api/bot/start", requireLogin, requireSubscription, async (req, res) => {
+  try {
+    const channel = req.user.login || req.user.display_name;
 
-      if (twitchBots[channel]) {
-        return res.json({ ok: false, error: "Bot already running" });
-      }
-
-      const bot = await startTwitchBot(channel);
-      twitchBots[channel] = bot;
-
-      res.json({ ok: true, message: "Bot started", channel });
-    } catch (err) {
-      console.error("Start bot error:", err);
-      res.status(500).json({ ok: false, error: err.message });
+    if (twitchBots[channel]) {
+      return res.json({ ok: false, error: "Bot already running" });
     }
+
+    const bot = await startTwitchBot(channel);
+    twitchBots[channel] = bot;
+
+    res.json({ ok: true, message: "Bot started", channel });
+  } catch (err) {
+    console.error("Start bot error:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
-);
+});
 
 // ===============================
 // API: STOP BOT
@@ -365,58 +406,6 @@ app.post("/api/create-checkout-session", requireLogin, async (req, res) => {
     console.error("Stripe session error:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
-});
-
-// ===============================
-// STRIPE: WEBHOOK (REAL HANDLER)
-// ===============================
-app.post("/webhook", (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    console.error("Webhook signature error:", err);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // Subscription activated
-  if (
-    event.type === "checkout.session.completed" ||
-    event.type === "invoice.payment_succeeded"
-  ) {
-    const email = event.data.object.customer_email;
-
-    if (email) {
-      subscriptions[email] = { status: "active" };
-      fs.writeFileSync(
-        subscriptionsFile,
-        JSON.stringify(subscriptions, null, 2)
-      );
-      console.log("💳 Subscription activated for:", email);
-    }
-  }
-
-  // Subscription canceled
-  if (event.type === "customer.subscription.deleted") {
-    const email = event.data.object.customer_email;
-
-    if (email) {
-      subscriptions[email] = { status: "inactive" };
-      fs.writeFileSync(
-        subscriptionsFile,
-        JSON.stringify(subscriptions, null, 2)
-      );
-      console.log("❌ Subscription canceled for:", email);
-    }
-  }
-
-  res.json({ received: true });
 });
 
 // ===============================

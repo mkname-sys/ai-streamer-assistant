@@ -1,12 +1,12 @@
 import tmi from "tmi.js";
-import fetch from "node-fetch"; // for AI API calls
+import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
 
-let clients = {}; // store running bot clients per channel
+let clients = {};
 
 // ----------------------
-// Load per-channel settings
+// Load channel settings
 // ----------------------
 function getChannelSettings(channel) {
   try {
@@ -15,13 +15,13 @@ function getChannelSettings(channel) {
     const data = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
     return data[channel] || { ai: true, voice: true };
   } catch (err) {
-    console.error("Error reading channel settings:", err);
+    console.error("Settings error:", err);
     return { ai: true, voice: true };
   }
 }
 
 // ----------------------
-// Check if user is subscribed
+// Check subscription
 // ----------------------
 function isSubscribed(channel) {
   try {
@@ -30,13 +30,13 @@ function isSubscribed(channel) {
     const subs = JSON.parse(fs.readFileSync(subsPath, "utf-8"));
     return subs[channel]?.status === "active";
   } catch (err) {
-    console.error("Error reading subscriptions:", err);
+    console.error("Subscription check error:", err);
     return false;
   }
 }
 
 // ----------------------
-// Start Twitch Bot
+// START BOT
 // ----------------------
 export async function startTwitchBot(channelName) {
   if (clients[channelName]) {
@@ -45,77 +45,73 @@ export async function startTwitchBot(channelName) {
   }
 
   if (!isSubscribed(channelName)) {
-    console.log(`❌ Cannot start bot — ${channelName} is not subscribed.`);
+    console.log(`❌ ${channelName} is not subscribed.`);
     return null;
   }
 
   const username = process.env.TWITCH_BOT_USERNAME;
   const token = process.env.TWITCH_OAUTH_TOKEN;
-  const channel = channelName || process.env.TWITCH_CHANNEL_NAME;
 
-  if (!username || !token || !channel) {
-    console.log("❌ Missing Twitch environment variables.");
+  if (!username || !token || !channelName) {
+    console.log("❌ Missing required Twitch env variables.");
     return null;
   }
 
   const client = new tmi.Client({
     options: { debug: true },
-    identity: { username, password: token },
-    channels: [channel],
+    identity: {
+      username,
+      password: token,
+    },
+    channels: [channelName],
   });
 
   await client.connect();
 
   client.on("connected", () => {
-    console.log(`✅ Twitch bot connected as ${username} in channel ${channel}`);
+    console.log(`✅ Bot connected to ${channelName}`);
   });
 
-  // ----------------------
-  // Chat message handler
-  // ----------------------
-  client.on("message", async (channelName, tags, message, self) => {
+  client.on("message", async (channel, tags, message, self) => {
     if (self) return;
 
     const settings = getChannelSettings(channelName);
 
-    // ----------------------
     // Custom commands
-    // ----------------------
     if (message.toLowerCase() === "!clip") {
-      client.say(channelName, `@${tags.username} made a clip! 🎬`);
+      client.say(channel, `@${tags.username} made a clip! 🎬`);
       return;
     }
 
     if (message.toLowerCase() === "!shoutout") {
-      client.say(channelName, `Shoutout to @${tags.username}! Follow and support them! 🌟`);
+      client.say(channel, `Shoutout to @${tags.username}! 🌟`);
       return;
     }
 
-    // ----------------------
-    // AI chat
-    // ----------------------
+    // AI Command
     if (settings.ai && message.toLowerCase().startsWith("!ai ")) {
       const userMessage = message.slice(4).trim();
       if (!userMessage) return;
 
       try {
-        const res = await fetch("http://localhost:3000/api/ai/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userMessage }),
-        });
+        const res = await fetch(
+          `${process.env.BASE_URL}/api/ai/generate`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userMessage }),
+          }
+        );
+
         const data = await res.json();
+
         if (data.ok && data.reply) {
-          const replyMessage = `@${tags.username} ${data.reply}`;
-
-          // Send message in chat
-          client.say(channelName, replyMessage);
-
-          // Update overlay automatically
-          global.overlayMessage = replyMessage;
+          const reply = `@${tags.username} ${data.reply}`;
+          client.say(channel, reply);
+          global.overlayMessage = reply;
         }
       } catch (err) {
-        console.error("AI reply error:", err);
+        console.error("AI error:", err);
       }
     }
   });
@@ -125,16 +121,18 @@ export async function startTwitchBot(channelName) {
 }
 
 // ----------------------
-// Stop Twitch Bot
+// STOP BOT
 // ----------------------
 export async function stopTwitchBot(channelName) {
   const client = clients[channelName];
+
   if (!client) {
-    console.log(`⚠️ Bot is not running for ${channelName}`);
+    console.log(`⚠️ Bot not running for ${channelName}`);
     return;
   }
 
   await client.disconnect();
   delete clients[channelName];
-  console.log(`🛑 Twitch bot stopped for ${channelName}`);
+
+  console.log(`🛑 Bot stopped for ${channelName}`);
 }

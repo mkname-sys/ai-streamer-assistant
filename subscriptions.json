@@ -1,1 +1,8 @@
-{}
+{
+  "user@email.com": {
+    "status": "active",
+    "tokensUsed": 2450,
+    "tokenLimit": 50000,
+    "currentPeriodStart": "2026-02-01"
+  }
+}

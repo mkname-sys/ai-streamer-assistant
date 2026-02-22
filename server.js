@@ -21,9 +21,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ===============================
-// STRIPE WEBHOOK RAW BODY (MUST BE FIRST)
-// ===============================
+/* =========================================================
+   PRODUCTION SECURITY ADDITIONS (NEW CODE ONLY)
+========================================================= */
+
+app.set("trust proxy", 1); // ✅ Required for Render cookies
+
+/* =========================================================
+   STRIPE WEBHOOK RAW BODY (MUST BE FIRST)
+========================================================= */
+
 app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
@@ -39,7 +46,6 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Subscription activated
   if (
     event.type === "checkout.session.completed" ||
     event.type === "invoice.payment_succeeded"
@@ -65,7 +71,6 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     }
   }
 
-  // Subscription canceled
   if (event.type === "customer.subscription.deleted") {
     const email = event.data.object.customer_email;
 
@@ -91,41 +96,52 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
   res.json({ received: true });
 });
 
-// ===============================
-// MIDDLEWARE
-// ===============================
+/* =========================================================
+   MIDDLEWARE
+========================================================= */
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ✅ Production safe session configuration (UPDATED)
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "lax",
+    },
   })
 );
 
 app.use(passport.initialize());
 app.use(passport.session());
 
-// ===============================
-// SERVE PUBLIC FILES
-// ===============================
+/* =========================================================
+   SERVE PUBLIC FILES
+========================================================= */
+
 app.use(express.static(path.join(__dirname, "public")));
 
-// ===============================
-// AUTH ROUTES
-// ===============================
+/* =========================================================
+   AUTH ROUTES
+========================================================= */
+
 app.use("/auth", authRoutes);
 
-// ===============================
-// GLOBAL BOT STORAGE
-// ===============================
+/* =========================================================
+   GLOBAL BOT STORAGE
+========================================================= */
+
 const twitchBots = {};
 
-// ===============================
-// SETTINGS FILE
-// ===============================
+/* =========================================================
+   SETTINGS FILE
+========================================================= */
+
 const settingsFile = path.join(__dirname, "settings.json");
 let settings = {};
 
@@ -136,9 +152,10 @@ if (fs.existsSync(settingsFile)) {
   fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
 }
 
-// ===============================
-// SUBSCRIPTIONS FILE
-// ===============================
+/* =========================================================
+   SUBSCRIPTIONS FILE
+========================================================= */
+
 const subscriptionsFile = path.join(__dirname, "subscriptions.json");
 let subscriptions = {};
 
@@ -149,14 +166,16 @@ if (fs.existsSync(subscriptionsFile)) {
   fs.writeFileSync(subscriptionsFile, JSON.stringify(subscriptions, null, 2));
 }
 
-// ===============================
-// OVERLAY STORAGE (PER CHANNEL)
-// ===============================
+/* =========================================================
+   OVERLAY STORAGE (PER CHANNEL)
+========================================================= */
+
 const overlayMessages = {};
 
-// ===============================
-// LOGIN CHECK MIDDLEWARE
-// ===============================
+/* =========================================================
+   LOGIN CHECK MIDDLEWARE
+========================================================= */
+
 function requireLogin(req, res, next) {
   if (!req.user) {
     return res.status(401).json({ ok: false, error: "Not logged in" });
@@ -164,9 +183,10 @@ function requireLogin(req, res, next) {
   next();
 }
 
-// ===============================
-// SUBSCRIPTION CHECK MIDDLEWARE
-// ===============================
+/* =========================================================
+   SUBSCRIPTION CHECK MIDDLEWARE
+========================================================= */
+
 function requireSubscription(req, res, next) {
   const email = req.user.email;
 
@@ -186,9 +206,10 @@ function requireSubscription(req, res, next) {
   next();
 }
 
-// ===============================
-// ROUTES (PAGES)
-// ===============================
+/* =========================================================
+   ROUTES (PAGES)
+========================================================= */
+
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -201,9 +222,11 @@ app.get("/overlay/:channel", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "overlay.html"));
 });
 
-// ===============================
-// API: WHO AM I
-// ===============================
+/* =========================================================
+   API ROUTES
+========================================================= */
+
+/* WHO AM I */
 app.get("/api/me", (req, res) => {
   if (!req.user) return res.json({ ok: false });
 
@@ -218,17 +241,13 @@ app.get("/api/me", (req, res) => {
   });
 });
 
-// ===============================
-// API: CHANNELS LIST
-// ===============================
+/* CHANNEL LIST */
 app.get("/api/channels", requireLogin, (req, res) => {
   const channel = req.user.login || req.user.display_name;
   res.json([channel]);
 });
 
-// ===============================
-// API: GET SETTINGS
-// ===============================
+/* SETTINGS GET */
 app.get("/api/settings/:channel", requireLogin, (req, res) => {
   const channel = req.params.channel;
 
@@ -240,9 +259,7 @@ app.get("/api/settings/:channel", requireLogin, (req, res) => {
   res.json(settings[channel]);
 });
 
-// ===============================
-// API: SAVE SETTINGS
-// ===============================
+/* SETTINGS SAVE */
 app.post("/api/settings/:channel", requireLogin, (req, res) => {
   const channel = req.params.channel;
   const { ai, voice } = req.body;
@@ -257,9 +274,7 @@ app.post("/api/settings/:channel", requireLogin, (req, res) => {
   res.json({ ok: true, settings: settings[channel] });
 });
 
-// ===============================
-// API: BOT STATUS
-// ===============================
+/* BOT STATUS */
 app.get("/api/bot/status", requireLogin, (req, res) => {
   const channel = req.user.login || req.user.display_name;
   const running = twitchBots[channel] ? true : false;
@@ -267,9 +282,7 @@ app.get("/api/bot/status", requireLogin, (req, res) => {
   res.json({ running });
 });
 
-// ===============================
-// API: START BOT (LOCKED TO SUBSCRIBERS)
-// ===============================
+/* START BOT */
 app.post("/api/bot/start", requireLogin, requireSubscription, async (req, res) => {
   try {
     const channel = req.user.login || req.user.display_name;
@@ -288,9 +301,7 @@ app.post("/api/bot/start", requireLogin, requireSubscription, async (req, res) =
   }
 });
 
-// ===============================
-// API: STOP BOT
-// ===============================
+/* STOP BOT */
 app.post("/api/bot/stop", requireLogin, async (req, res) => {
   try {
     const channel = req.user.login || req.user.display_name;
@@ -309,9 +320,7 @@ app.post("/api/bot/stop", requireLogin, async (req, res) => {
   }
 });
 
-// ===============================
-// API: SEND OVERLAY MESSAGE (PER CHANNEL)
-// ===============================
+/* OVERLAY SEND */
 app.post("/api/overlay/send", requireLogin, (req, res) => {
   const { message } = req.body;
 
@@ -325,9 +334,7 @@ app.post("/api/overlay/send", requireLogin, (req, res) => {
   res.json({ ok: true, message: "Overlay updated" });
 });
 
-// ===============================
-// API: GET OVERLAY MESSAGE (PER CHANNEL)
-// ===============================
+/* OVERLAY GET */
 app.get("/api/overlay/:channel", (req, res) => {
   const channel = req.params.channel;
 
@@ -337,9 +344,7 @@ app.get("/api/overlay/:channel", (req, res) => {
   });
 });
 
-// ===============================
-// API: AI GENERATE
-// ===============================
+/* AI GENERATE */
 app.post("/api/ai/generate", requireLogin, async (req, res) => {
   try {
     const { message } = req.body;
@@ -355,9 +360,7 @@ app.post("/api/ai/generate", requireLogin, async (req, res) => {
   }
 });
 
-// ===============================
-// SSE: LIVE UPDATES (PER CHANNEL)
-// ===============================
+/* SSE LIVE UPDATES */
 app.get("/api/live/:channel", requireLogin, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -382,9 +385,7 @@ app.get("/api/live/:channel", requireLogin, (req, res) => {
   });
 });
 
-// ===============================
-// STRIPE: CREATE CHECKOUT SESSION
-// ===============================
+/* STRIPE CHECKOUT */
 app.post("/api/create-checkout-session", requireLogin, async (req, res) => {
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
@@ -408,9 +409,7 @@ app.post("/api/create-checkout-session", requireLogin, async (req, res) => {
   }
 });
 
-// ===============================
-// START SERVER
-// ===============================
+/* START SERVER */
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
